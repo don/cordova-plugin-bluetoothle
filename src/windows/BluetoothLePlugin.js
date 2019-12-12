@@ -265,6 +265,11 @@ module.exports = {
     }
 
     var deviceId;
+    // Add shouldUnpair option, default to true to maintain default functionality
+    var shouldUnpair = params[0].shouldUnpair;
+    if (typeof shouldUnpair !== 'boolean') {
+      shouldUnpair = true;
+    }
 
     if (params && params.length > 0 && params[0].address) {
       deviceId = params[0].address;
@@ -280,7 +285,10 @@ module.exports = {
       }
       getDeviceByAddress(deviceId).then(function(device){
         device.close();
-        return device.deviceInformation.pairing.unpairAsync();
+        if (shouldUnpair) {
+          return device.deviceInformation.pairing.unpairAsync();
+        }
+        return;
       }).done(function(result){
         successCallback({ address: deviceId, status: 'closed'});
       }, function(error){
