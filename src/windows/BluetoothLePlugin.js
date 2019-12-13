@@ -220,6 +220,10 @@ module.exports = {
     }
 
     var address = params && params[0] && params[0].address;
+    var watchForChanges = params && params[0] && params[0].watchForChanges;
+    if (typeof watchForChanges !== 'boolean') {
+      watchForChanges = true;
+    }
     if (!address) {
       errorCallback({ error: "connect", message: "Device address is not specified" });
       return;
@@ -242,17 +246,21 @@ module.exports = {
         status: bleDevice.connectionStatus === BluetoothConnectionStatus.connected ? "connected" : "disconnected"
       };
 
-      // Attach listener to device to report disconnected event
-      bleDevice.addEventListener('connectionstatuschanged', function connectionStatusListener(e) {
-        if (e.target.connectionStatus === BluetoothConnectionStatus.disconnected) {
-          result.status = "disconnected";
-          successCallback(result);
-          bleDevice.removeEventListener('connectionstatuschanged', connectionStatusListener);
-        }
-      });
-      // Need to use keepCallback to be able to report "disconnect" event
-      // https://github.com/randdusing/cordova-plugin-bluetoothle#connect
-      successCallback(result, { keepCallback: true });
+      if (watchForChanges) {
+        // Attach listener to device to report disconnected event
+        bleDevice.addEventListener('connectionstatuschanged', function connectionStatusListener(e) {
+          if (e.target.connectionStatus === BluetoothConnectionStatus.disconnected) {
+            result.status = "disconnected";
+            successCallback(result);
+            bleDevice.removeEventListener('connectionstatuschanged', connectionStatusListener);
+          }
+        });
+        // Need to use keepCallback to be able to report "disconnect" event
+        // https://github.com/randdusing/cordova-plugin-bluetoothle#connect
+        successCallback(result, { keepCallback: true });
+      } else {
+        successCallback(result);
+      }
     }, function (err) {
       errorCallback(err);
     });
