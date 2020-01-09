@@ -234,6 +234,19 @@ module.exports = {
       if (bleDevice.connectionStatus === BluetoothConnectionStatus.connected) {
         return bleDevice;
       }
+
+      // EW1 specific change
+      // Peripheral requires a PIN causing problems during the initial pairing
+      // If the peripheral is not paired, reject the connection until the user
+      // pairs the device using the Windows Bluetooth system settings 
+      var deviceInfo = bleDevice.deviceInformation;
+      if (! deviceInfo.pairing.isPaired) {
+        console.debug({deviceInfo});
+        console.debug('Peripheral is not paired, refusing to connect.')
+        throw new Error('Device must be paired using the Windows Bluetooth settings');
+      }
+      // end EW1 change
+
       //if we're not already connected, getting the services will cause a connection to happen
       return bleDevice.getGattServicesAsync(WindowsBluetooth.BluetoothCacheMode.uncached).then(function(){
         return bleDevice;
