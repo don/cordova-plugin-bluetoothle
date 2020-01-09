@@ -220,6 +220,10 @@ module.exports = {
     }
 
     var address = params && params[0] && params[0].address;
+    var watchForChanges = params && params[0] && params[0].watchForChanges;
+    if (typeof watchForChanges !== 'boolean') {
+      watchForChanges = true;
+    }
     if (!address) {
       errorCallback({ error: "connect", message: "Device address is not specified" });
       return;
@@ -242,17 +246,21 @@ module.exports = {
         status: bleDevice.connectionStatus === BluetoothConnectionStatus.connected ? "connected" : "disconnected"
       };
 
-      // Attach listener to device to report disconnected event
-      bleDevice.addEventListener('connectionstatuschanged', function connectionStatusListener(e) {
-        if (e.target.connectionStatus === BluetoothConnectionStatus.disconnected) {
-          result.status = "disconnected";
-          successCallback(result);
-          bleDevice.removeEventListener('connectionstatuschanged', connectionStatusListener);
-        }
-      });
-      // Need to use keepCallback to be able to report "disconnect" event
-      // https://github.com/randdusing/cordova-plugin-bluetoothle#connect
-      successCallback(result, { keepCallback: true });
+      if (watchForChanges) {
+        // Attach listener to device to report disconnected event
+        bleDevice.addEventListener('connectionstatuschanged', function connectionStatusListener(e) {
+          if (e.target.connectionStatus === BluetoothConnectionStatus.disconnected) {
+            result.status = "disconnected";
+            successCallback(result);
+            bleDevice.removeEventListener('connectionstatuschanged', connectionStatusListener);
+          }
+        });
+        // Need to use keepCallback to be able to report "disconnect" event
+        // https://github.com/randdusing/cordova-plugin-bluetoothle#connect
+        successCallback(result, { keepCallback: true });
+      } else {
+        successCallback(result);
+      }
     }, function (err) {
       errorCallback(err);
     });
@@ -265,6 +273,11 @@ module.exports = {
     }
 
     var deviceId;
+    // Add shouldUnpair option, default to true to maintain default functionality
+    var shouldUnpair = params[0].shouldUnpair;
+    if (typeof shouldUnpair !== 'boolean') {
+      shouldUnpair = true;
+    }
 
     if (params && params.length > 0 && params[0].address) {
       deviceId = params[0].address;
@@ -280,7 +293,10 @@ module.exports = {
       }
       getDeviceByAddress(deviceId).then(function(device){
         device.close();
-        return device.deviceInformation.pairing.unpairAsync();
+        if (shouldUnpair) {
+          return device.deviceInformation.pairing.unpairAsync();
+        }
+        return;
       }).done(function(result){
         successCallback({ address: deviceId, status: 'closed'});
       }, function(error){
