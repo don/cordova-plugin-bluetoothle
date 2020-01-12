@@ -5,6 +5,8 @@ var wsc = Windows.Security.Cryptography;
 var BluetoothUuidHelper = WindowsBluetooth.BluetoothUuidHelper;
 var BluetoothConnectionStatus = WindowsBluetooth.BluetoothConnectionStatus;
 var DeviceWatcherStatus = Windows.Devices.Enumeration.DeviceWatcherStatus;
+var DevEnum = Windows.Devices.Enumeration;
+
 
 var WATCHER, scanCallback;
 
@@ -228,27 +230,24 @@ module.exports = {
       errorCallback({ error: "connect", message: "Device address is not specified" });
       return;
     }
+    var pin = params && params[0] && params[0].pin;
 
     getDeviceByAddress(address)
     .then(function(bleDevice){
       if (bleDevice.connectionStatus === BluetoothConnectionStatus.connected) {
+        console.log('returning a device that is already connected');
         return bleDevice;
       }
 
-      // EW1 specific change
-      // Peripheral requires a PIN causing problems during the initial pairing
-      // If the peripheral is not paired, reject the connection until the user
-      // pairs the device using the Windows Bluetooth system settings 
-      var deviceInfo = bleDevice.deviceInformation;
-      if (! deviceInfo.pairing.isPaired) {
-        console.debug({deviceInfo});
-        console.debug('Peripheral is not paired, refusing to connect.')
-        throw new Error('Device must be paired using the Windows Bluetooth settings');
+      // if device can pair and a pin is supplied, initiate custom pairing
+      if (pin && bleDevice.deviceInformation.pairing.canPair) {
+        return pairWithPin(bleDevice, pin);
       }
-      // end EW1 change
 
+      console.log('calling getGattServicesAsync to force a connection');
       //if we're not already connected, getting the services will cause a connection to happen
       return bleDevice.getGattServicesAsync(WindowsBluetooth.BluetoothCacheMode.uncached).then(function(){
+        console.log('getGattServicesAsync complete');
         return bleDevice;
       });
     })
@@ -782,6 +781,30 @@ androidActions.forEach(function(key){
     errorCallback({error: key, message: error});
   };
 });
+
+function pairWithPin(bleDevice, pin) {
+  console.log('Initiating pairing with PIN');
+  var customPairing = bleDevice.deviceInformation.pairing.custom;
+
+  // pairing request handler for DevEnum.DevicePairingKinds.providePin
+  function pairingRequestHandler(args) {
+    console.log('Setting PIN ' + pin);
+    args.accept(pin);
+  }
+  customPairing.addEventListener("pairingrequested", pairingRequestHandler);
+
+  return customPairing.pairAsync(DevEnum.DevicePairingKinds.providePin).then(function (pairingResult) {
+    if (pairingResult.status == DevEnum.DevicePairingResultStatus.paired) {
+      console.log('Pairing was successful');
+    } else {
+      // https://docs.microsoft.com/en-us/uwp/api/windows.devices.enumeration.devicepairingresultstatus
+      console.log('Pairing failed with status=' + pairingResult.status);
+      throw new Error('Pairing failed');
+    }
+    customPairing.removeEventListener("pairingrequested", pairingRequestHandler);
+    return bleDevice;
+  });
+}
 
 function addressToUint64(deviceAddress) {
   if (typeof deviceAddress === 'string') {
